@@ -69,8 +69,7 @@
 
 (let* ((rows (sqlite-exec-collect db select-group))
        (time-entries (map row-to-entry rows)))
-  (print-entries time-entries)
-)
+  (print-entries time-entries))
 
 (sqlite-close db)
 
