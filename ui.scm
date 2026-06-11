@@ -3,6 +3,7 @@
              (ice-9 format)
              (ice-9 match)
              (ice-9 time)
+             (ice-9 getopt-long)
              (srfi srfi-1)
              (srfi srfi-9)
              (srfi srfi-13)
@@ -47,7 +48,11 @@
   (for-each 
     (lambda (time-entry) 
       (display (format-entry time-entry))) 
-    tes))
+    tes)
+  (display (format-duration 
+             (fold + 0 
+                   (map time-entry-duration tes))))
+  (display "\n"))
 
 (define (date-entries tes date)
   (filter 
@@ -55,21 +60,45 @@
     tes))
 
 (define (today-entries tes)
-  (print-date-entries tes (strftime "%Y-%m-%d" (localtime (current-time)))))
+  (date-entries tes (strftime "%Y-%m-%d" (localtime (current-time)))))
 
 (define (task-entries tes task)
   (filter 
     (lambda (te) (string-contains (time-entry-task te) task)) 
     tes))
 
+(define option-spec
+  '((today (single-char #\t) (value #f))
+    (date  (single-char #\d) (value #t))
+    (task  (single-char #\T) (value #t))
+    (help  (single-char #\h) (value #f))))
+
+(define (show-help)
+  (display "Usage: work_time [options]\n")
+  (display "Options:\n")
+  (display "  -t, --today          time entries for today\n")
+  (display "  -d, --date <DATE>    time entries for date (YYYY-MM-DD)\n")
+  (display "  -T, --task <TASK>    time entries for task\n")
+  (display "  -h, --help           this message\n"))
+
 
 ;; main
 (load-dotenv)
 (define db (sqlite-open (getenv "DB_NAME")))
 
-(let* ((rows (sqlite-exec-collect db select-group))
+(let* ((opts (getopt-long (command-line) option-spec))
+       (rows (sqlite-exec-collect db select-group))
        (time-entries (map row-to-entry rows)))
-  (print-entries time-entries))
+  (cond 
+    ((option-ref opts 'help #f)     
+      (show-help))
+    ((option-ref opts 'today #f)     
+      (print-entries (today-entries time-entries)))
+    ((option-ref opts 'date #f) =>  
+      (lambda (d) (print-entries (date-entries time-entries d))))
+    ((option-ref opts 'task #f) =>  
+      (lambda (t) (print-entries (task-entries time-entries t))))
+    (else (print-entries time-entries))))
 
 (sqlite-close db)
 
