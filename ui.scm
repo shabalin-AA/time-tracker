@@ -23,6 +23,14 @@
          (#(task date duration) 
           (make-time-entry task date duration))))
 
+(define (with-db proc)
+  (load-dotenv)
+  (let ((db (sqlite-open (getenv "DB_NAME"))))
+    (dynamic-wind
+      (lambda () #f)
+      (lambda () (proc db))
+      (lambda () (sqlite-close db)))))
+
 (define (sqlite-exec-collect db sql)
   (let ((rows '()) (stmt (sqlite-prepare db sql)))
     (sqlite-map (lambda (row) (set! rows (cons row rows))) stmt)
@@ -68,38 +76,35 @@
     tes))
 
 (define option-spec
-  '((today (single-char #\t) (value #f))
+  '((today (single-char #\T) (value #f))
     (date  (single-char #\d) (value #t))
-    (task  (single-char #\T) (value #t))
+    (task  (single-char #\t) (value #t))
     (help  (single-char #\h) (value #f))))
 
 (define (show-help)
   (display "Usage: work_time [options]\n")
   (display "Options:\n")
-  (display "  -t, --today          time entries for today\n")
+  (display "  -T, --today          time entries for today\n")
   (display "  -d, --date <DATE>    time entries for date (YYYY-MM-DD)\n")
-  (display "  -T, --task <TASK>    time entries for task\n")
+  (display "  -t, --task <TASK>    time entries for task\n")
   (display "  -h, --help           this message\n"))
 
 
-;; main
-(load-dotenv)
-(define db (sqlite-open (getenv "DB_NAME")))
-
-(let* ((opts (getopt-long (command-line) option-spec))
-       (rows (sqlite-exec-collect db select-group))
-       (time-entries (map row-to-entry rows)))
-  (cond 
-    ((option-ref opts 'help #f)     
-      (show-help))
-    ((option-ref opts 'today #f)     
-      (print-entries (today-entries time-entries)))
-    ((option-ref opts 'date #f) =>  
-      (lambda (d) (print-entries (date-entries time-entries d))))
-    ((option-ref opts 'task #f) =>  
-      (lambda (t) (print-entries (task-entries time-entries t))))
-    (else (print-entries time-entries))))
-
-(sqlite-close db)
-
+(define (main)
+  (with-db 
+    (lambda (db) 
+      (let* ((opts (getopt-long (command-line) option-spec))
+             (rows (sqlite-exec-collect db select-group))
+             (time-entries (map row-to-entry rows)))
+        (cond 
+          ((option-ref opts 'help #f)     
+           (show-help))
+          ((option-ref opts 'today #f)     
+           (print-entries (today-entries time-entries)))
+          ((option-ref opts 'date #f) =>  
+            (lambda (d) (print-entries (date-entries time-entries d))))
+          ((option-ref opts 'task #f) =>  
+            (lambda (t) (print-entries (task-entries time-entries t))))
+          (else (print-entries time-entries)))))))
+(main)
 ;; end
